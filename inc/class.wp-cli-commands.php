@@ -34,7 +34,7 @@ class Command {
         // Get lessons for the course.
         $lessons = get_posts([
             'post_type'   => 'lesson',
-            'post_status' => 'publish',
+            'posts_per_page' => -1,
             'meta_query'  => [
                 [
                     'key'   => '_lesson_course',
@@ -66,6 +66,13 @@ class Command {
             preg_match_all( '/<h[1-6][^>]*>(.*?)<\/h[1-6]>/', $lesson_content, $headings );
 
             foreach ( $headings[1] as $heading ) {
+
+                // pre-process headings
+                $heading = str_replace( '<strong>', '', $heading );
+                $heading = str_replace( '</strong>', '', $heading );
+                $heading = str_replace( '<br>', '', $heading );
+                $heading = str_replace( '&nbsp;', '', $heading );
+
                 $title_case_heading = $this->title_case->to_title_case( $heading );
                 if ( $heading !== $title_case_heading ) {
                     $rows[] = [
@@ -86,27 +93,13 @@ class Command {
         WP_CLI\Utils\format_items( 'table', $rows, [ 'Current Title', 'Title Case', 'Edit Link' ] );
     }
 
-    /**
-     * Audit a Sensei course for punctuation issues.
-     *
-     * ## OPTIONS
-     *
-     * <course_id>
-     * : The ID of the Sensei course to audit.
-     *
-     * ## EXAMPLES
-     *
-     * wp course-punctuation-audit 123
-     *
-     * @when after_wp_load
-     */
     public function course_punctuation_audit( $args ) {
         list( $course_id ) = $args;
-
+    
         // Get lessons for the course.
         $lessons = get_posts([
             'post_type'   => 'lesson',
-            'post_status' => 'publish',
+            'posts_per_page' => -1,
             'meta_query'  => [
                 [
                     'key'   => '_lesson_course',
@@ -114,38 +107,88 @@ class Command {
                 ],
             ],
         ]);
-
+    
         if ( empty( $lessons ) ) {
             WP_CLI::error( 'No lessons found for this course.' );
         }
-
+    
         $rows = [];
-
+    
         foreach ( $lessons as $lesson ) {
             $lesson_content = $lesson->post_content;
 
-            // Check paragraphs, list items, and blockquotes.
-            preg_match_all( '/<(p|li|blockquote)[^>]*>(.*?)<\/\1>/', $lesson_content, $matches, PREG_SET_ORDER );
+            // strip out some characters which confuse the string comparison later
+            $lesson_content = str_replace('&nbsp;', '', $lesson_content);
+            $lesson_content = str_replace("\u{00A0}", " ", $lesson_content);
+    
+            // Parse the content using DOMDocument.
+            $dom = new \DOMDocument();
+            @$dom->loadHTML( '<?xml encoding="utf-8" ?>' . $lesson_content );
 
-            foreach ( $matches as $match ) {
-                $text = trim( strip_tags( $match[2] ) );
+            $allowed_characters = [ '.', '!', '?', ':', '"', '”' ];
+    
+            // Extract paragraphs, list items, and blockquotes.
+            foreach ( ['p', 'li', 'blockquote'] as $tag ) {
+                $elements = $dom->getElementsByTagName( $tag );
+                foreach ( $elements as $element ) {
 
-                if ( ! preg_match( '/[.!?:]$/', $text ) ) {
-                    $rows[] = [
-                        'Text'      => $text,
-                        'Edit Link' => admin_url( "post.php?post={$lesson->ID}&action=edit" ),
-                    ];
+                    $text = trim( $element->textContent );
+                    
+                    if( !empty( $text) ){
+
+                        $last_char = substr( $text, -1 );
+
+                        if ( ! in_array( $last_char, $allowed_characters ) ) {
+                            $rows[] = [
+                                'Text'      => $text,
+                                'LastChar' => $last_char . ' [' . bin2hex($last_char) . ']',
+                                'Edit Link' => admin_url( "post.php?post={$lesson->ID}&action=edit" ),
+                            ];
+                        }
+                    }
                 }
             }
         }
-
+    
         if ( empty( $rows ) ) {
             WP_CLI::success( 'All paragraphs, list items, and blockquotes are properly punctuated.' );
             return;
         }
-
+    
         // Display the results in a table.
-        WP_CLI\Utils\format_items( 'table', $rows, [ 'Text', 'Edit Link' ] );
+        WP_CLI\Utils\format_items( 'table', $rows, [ 'Text', 'LastChar', 'Edit Link' ] );
+    }
+    
+
+    private function get_text_content( $dom ) {
+        $text = '';
+    
+        $body = $dom->getElementsByTagName('body')->item(0);
+        if ( $body === null ) {
+            return $text; // Return an empty string if the body tag is not present.
+        }
+    
+        foreach ( $body->childNodes as $node ) {
+            $text .= $this->node_to_text( $node );
+        }
+    
+        return trim( $text );
+    }    
+
+    private function node_to_text( $node ) {
+        if ( $node->nodeType === XML_TEXT_NODE ) {
+            return $node->nodeValue;
+        }
+
+        $text = '';
+
+        if ( $node->hasChildNodes() ) {
+            foreach ( $node->childNodes as $child ) {
+                $text .= $this->node_to_text( $child );
+            }
+        }
+
+        return $text;
     }
 }
 
