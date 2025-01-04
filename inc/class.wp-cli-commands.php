@@ -26,7 +26,6 @@ class Command {
      *
      * wp course-title-audit 123
      *
-     * @when after_wp_load
      */
     public function course_title_audit( $args ) {
         list( $course_id ) = $args;
@@ -160,7 +159,37 @@ class Command {
         // Display the results in a table.
         WP_CLI\Utils\format_items( 'table', $rows, [ 'Text', 'LastChar', 'Edit Link' ] );
     }
-    
+
+    /**
+     * Check provided string is title case
+     *
+     * ## OPTIONS
+     *
+     * <title>
+     * : The ID of the Sensei course to audit.
+     *
+     * ## EXAMPLES
+     *
+     * wp vip-learn audit check-title-case "this is my title"
+     *
+     */
+    public function check_title_case( $args ) {
+        list( $title ) = $args;
+
+        if( empty( $title) ){
+            WP_CLI::error("Title is empty");
+        }
+
+        $title = trim( $title );
+
+        $title_case_title = $this->title_case->to_title_case( $title );
+        if( $title_case_title === $title ){
+            WP_CLI::success("Provided title looks like title case");
+        } else {
+            WP_CLI::error("Provided title should probably be: " . $title_case_title );
+        }
+
+    }
 
     private function get_text_content( $dom ) {
         $text = '';
@@ -196,6 +225,7 @@ class Command {
 
 // Register the commands with WP-CLI.
 if ( class_exists( 'WP_CLI' ) ) {
-    WP_CLI::add_command( 'vip-learn course-title-audit', [ new Command(), 'course_title_audit' ] );
-    WP_CLI::add_command( 'vip-learn course-punctuation-audit', [ new Command(), 'course_punctuation_audit' ] );
+    WP_CLI::add_command( 'vip-learn audit course-title', [ new Command(), 'course_title_audit' ] );
+    WP_CLI::add_command( 'vip-learn audit course-punctuation', [ new Command(), 'course_punctuation_audit' ] );
+    WP_CLI::add_command( 'vip-learn audit check-title-case', [ new Command(), 'check_title_case' ] );
 }
