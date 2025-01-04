@@ -72,6 +72,8 @@ class Command {
                 $heading = str_replace( '</strong>', '', $heading );
                 $heading = str_replace( '<br>', '', $heading );
                 $heading = str_replace( '&nbsp;', '', $heading );
+                $heading = str_replace( '</code>', ' ', $heading ); 
+                $heading = str_replace( '<code>', '', $heading ); 
 
                 $title_case_heading = $this->title_case->to_title_case( $heading );
                 if ( $heading !== $title_case_heading ) {
