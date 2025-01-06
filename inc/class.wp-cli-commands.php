@@ -3,19 +3,46 @@ namespace VIP\Learn\Audit;
 
 use WP_CLI;
 
-if ( ! defined( 'ABSPATH' ) ) {
+if (!defined('ABSPATH')) {
     exit;
 }
 
+/**
+ * WP CLI command class for auditing Sensei courses.
+ * 
+ * @package VIP\Learn\Audit
+ * @category CLI
+ * @author Automattic
+ * @license GPL-2.0-or-later
+ * @link     https://github.com/Automattic/vip-learn-audit
+ */
 class Command {
+    /**
+     * Title case converter instance.
+     *
+     * @var TitleCase
+     */
     private $title_case;
 
+    /**
+     * Sentence case converter instance.
+     *
+     * @var SentenceCase
+     */
+    private $sentence_case;
+
+    /**
+     * Initialize the command.
+     */
     public function __construct() {
         $this->title_case = new TitleCase();
+        $this->sentence_case = new SentenceCase();
     }
 
     /**
-     * Audit a Sensei course for title case issues.
+     * Audit a specified Sensei course for title case issues in lesson titles and headings 
+     * 
+     * @param array $args Command arguments.
      *
      * ## OPTIONS
      *
@@ -26,8 +53,9 @@ class Command {
      *
      * wp course-title-audit 123
      *
+     * @return void
      */
-    public function course_title_audit( $args ) {
+    public function course_title_case_audit( $args ) {
         list( $course_id ) = $args;
 
         // Get lessons for the course.
@@ -94,6 +122,160 @@ class Command {
         WP_CLI\Utils\format_items( 'table', $rows, [ 'Current Title', 'Title Case', 'Edit Link' ] );
     }
 
+    /**
+     * Audit a specified Sensei course for for sentence case issues in lesson titles and headings 
+     * 
+     * @param array $args Command arguments.
+     *
+     * ## OPTIONS
+     *
+     * <course_id>
+     * : The ID of the Sensei course to audit.
+     */
+    public function course_sentence_case_audit( $args ) {
+        list( $course_id ) = $args;
+
+        // Get lessons for the course.
+        $lessons = get_posts([
+            'post_type'   => 'lesson',
+            'posts_per_page' => -1,
+            'meta_query'  => [
+                [
+                    'key'   => '_lesson_course',
+                    'value' => $course_id,
+                ],
+            ],
+        ]);
+
+        if ( empty( $lessons ) ) {
+            WP_CLI::error( 'No lessons found for this course.' );
+        }
+
+        $rows = [];
+
+        foreach ( $lessons as $lesson ) {
+            $lesson_content = $lesson->post_content;
+            $lesson_title = $lesson->post_title;
+            $sentence_case_title = $this->title_case->to_title_case( $lesson_title );
+
+            if ( $lesson_title !== $sentence_case_title ) {
+                $rows[] = [
+                    'Current Title' => $lesson_title,
+                    'Sentence Case'    => $sentence_case_title,
+                    'Edit Link'     => admin_url( "post.php?post={$lesson->ID}&action=edit" ),
+                ];
+            }
+
+            // Extract headings from content.
+            preg_match_all( '/<h[1-6][^>]*>(.*?)<\/h[1-6]>/', $lesson_content, $headings );
+
+            foreach ( $headings[1] as $heading ) {
+
+                // pre-process headings
+                $heading = str_replace( '<strong>', '', $heading );
+                $heading = str_replace( '</strong>', '', $heading );
+                $heading = str_replace( '<br>', '', $heading );
+                $heading = str_replace( '&nbsp;', '', $heading );
+                $heading = str_replace( '</code>', ' ', $heading ); 
+                $heading = str_replace( '<code>', '', $heading ); 
+
+                $sentence_case_heading = $this->sentence_case->to_sentence_case( $heading );
+                if( $heading !== $sentence_case_heading ){
+                    $rows[] = [
+                        'Current Title' => $heading,
+                        'Sentence Case' => $sentence_case_heading,
+                        'Edit Link' => admin_url( "post.php?post={$lesson->ID}&action=edit" ),
+                    ];
+                }
+            }
+        }
+
+        if ( empty( $rows ) ) {
+            WP_CLI::success( 'All headings is properly sentence cased.' );
+            return;
+        }
+
+        WP_CLI\Utils\format_items( 'table', $rows, [ 'Current Title', 'Sentence Case', 'Edit Link' ] );
+
+    }
+
+    /**
+     * Audit a Sensei course for special capitalization instances e.g. trademarks.
+     * 
+     * @param array $args Command arguments
+     *
+     * ## OPTIONS
+     *
+     * <course_id>
+     * : The ID of the Sensei course to audit.
+     *
+     * ## EXAMPLES
+     *
+     * wp vip-learn audit word-instances 123
+     *
+     */
+    public function word_instance_audit( $args ) {
+        list( $course_id ) = $args;
+
+        // Get lessons for the course.
+        $lessons = get_posts([
+            'post_type'   => 'lesson',
+            'posts_per_page' => -1,
+            'meta_query'  => [
+                [
+                    'key'   => '_lesson_course',
+                    'value' => $course_id,
+                ],
+            ],
+        ]);
+
+        if ( empty( $lessons ) ) {
+            WP_CLI::error( 'No lessons found for this course.' );
+        }
+
+        $rows = [];
+
+        foreach ( $lessons as $lesson ) {
+
+            // Parse the content using DOMDocument.
+            $dom = new \DOMDocument();
+            @$dom->loadHTML( '<?xml encoding="utf-8" ?>' . $lesson->post_content );
+
+            $text = $lesson->post_title . ' ' . $dom->textContent;
+
+            $punctuation = new Punctuation;
+
+            $results = $punctuation->get_incorrect_word_instances( $text, $punctuation->get_special_case_array() );
+            foreach( $results as $result ) {
+                
+                $rows[] = [
+                    'Page Title' => $lesson->post_title,
+                    'Word Instance'    => $result['instance']['incorrect_usage'],
+                    'Correct Word Instance' => $result['instance']['correct_usage'],
+                    'Edit Link'     => admin_url( "post.php?post={$lesson->ID}&action=edit" ),
+                ];
+            }
+        }
+
+        if ( empty( $rows ) ) {
+            WP_CLI::success( 'No incorrect word instances found.' );
+            return;
+        }
+
+        // Display the results in a table.
+        WP_CLI\Utils\format_items( 'table', $rows, [ 'Page Title', 'Word Instance', 'Correct Word Instance', 'Edit Link' ] );
+    }
+
+    /**
+     * Audit a Sensei course for basic punctuation issues, e.g. missing full-stops
+     * 
+     * @param array $args Command arguments.
+     *
+     * ## OPTIONS
+     *
+     * <course_id>
+     * : The ID of the Sensei course to audit.
+     */
     public function course_punctuation_audit( $args ) {
         list( $course_id ) = $args;
     
@@ -142,7 +324,7 @@ class Command {
                         if ( ! in_array( $last_char, $allowed_characters ) ) {
                             $rows[] = [
                                 'Text'      => $text,
-                                'LastChar' => $last_char . ' [' . bin2hex($last_char) . ']',
+                                'LastChar' => $last_char. ' [' . bin2hex($last_char) . ']',
                                 'Edit Link' => admin_url( "post.php?post={$lesson->ID}&action=edit" ),
                             ];
                         }
@@ -191,6 +373,31 @@ class Command {
 
     }
 
+    /**
+     * Check provided string is sentence case
+     *
+     * ## OPTIONS
+     *
+     * <title>
+     * : The ID of the Sensei course to audit.
+     */
+    public function check_sentence_case( $args ) {
+        list( $title ) = $args;
+
+        if( empty( $title) ){
+            WP_CLI::error("Title is empty");
+        }
+
+        $title = trim( $title );
+
+        $sentence_case_title = $this->sentence_case->to_sentence_case( $title );
+        if( $sentence_case_title === $title ){
+            WP_CLI::success("Provided title looks like sentence case");
+        } else {
+            WP_CLI::error("Provided title should probably be: " . $sentence_case_title );
+        }
+    }
+
     private function get_text_content( $dom ) {
         $text = '';
     
@@ -225,7 +432,10 @@ class Command {
 
 // Register the commands with WP-CLI.
 if ( class_exists( 'WP_CLI' ) ) {
-    WP_CLI::add_command( 'vip-learn audit course-title', [ new Command(), 'course_title_audit' ] );
+    WP_CLI::add_command( 'vip-learn audit course-title-case', [ new Command(), 'course_title_case_audit' ] );
+    WP_CLI::add_command( 'vip-learn audit course-sentence-case', [ new Command(), 'course_sentence_case_audit' ] );
     WP_CLI::add_command( 'vip-learn audit course-punctuation', [ new Command(), 'course_punctuation_audit' ] );
-    WP_CLI::add_command( 'vip-learn audit check-title-case', [ new Command(), 'check_title_case' ] );
+    WP_CLI::add_command( 'vip-learn audit check-title-case-string', [ new Command(), 'check_title_case' ] );
+    WP_CLI::add_command( 'vip-learn audit check-sentence-case-string', [ new Command(), 'check_sentence_case' ] );
+    WP_CLI::add_command( 'vip-learn audit word-instances', [ new Command(), 'word_instance_audit' ] );
 }

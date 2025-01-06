@@ -15,8 +15,10 @@ if ( ! defined( 'ABSPATH' ) ) {
     exit;
 }
 
-// Include the TitleCase class.
+// Include library classes
+require_once plugin_dir_path( __FILE__ ) . 'inc/class.punctuation.php';
 require_once plugin_dir_path( __FILE__ ) . 'inc/class.title-case.php';
+require_once plugin_dir_path( __FILE__ ) . 'inc/class.sentence-case.php';
 
 if ( defined( 'WP_CLI' ) && WP_CLI ) {
     require_once plugin_dir_path( __FILE__ ) . 'inc/class.wp-cli-commands.php';
