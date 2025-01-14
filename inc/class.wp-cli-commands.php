@@ -342,6 +342,64 @@ class Command {
         WP_CLI\Utils\format_items( 'table', $rows, [ 'Text', 'LastChar', 'Edit Link' ] );
     }
 
+    public function link_audit( $args ) {
+        list( $course_id ) = $args;
+    
+        $site_url = get_site_url();
+        
+        // Get lessons for the course.
+        $lessons = get_posts([
+            'post_type'   => 'lesson',
+            'posts_per_page' => -1,
+            'meta_query'  => [
+                [
+                    'key'   => '_lesson_course',
+                    'value' => $course_id,
+                ],
+            ],
+        ]);
+    
+        if ( empty( $lessons ) ) {
+            WP_CLI::error( 'No lessons found for this course.' );
+        }
+    
+        $rows = [];
+    
+        foreach ( $lessons as $lesson ) {
+            $lesson_content = $lesson->post_content;
+            $lesson_url = get_permalink( $lesson->ID );
+    
+            // Parse the content using DOMDocument.
+            $dom = new \DOMDocument();
+            @$dom->loadHTML( '<?xml encoding="utf-8" ?>' . $lesson_content );
+            $links = $dom->getElementsByTagName('a');
+    
+            foreach ( $links as $link ) {
+                $href = $link->getAttribute('href');
+                $target = $link->getAttribute('target');
+                $link_text = trim( $link->nodeValue );
+    
+                // Check if the link is external and does not open in a new tab.
+                if ( !empty( $href ) && strpos( $href, $site_url ) === false && $target !== '_blank' ) {
+                    $rows[] = [
+                        'Lesson URL' => $lesson_url,
+                        'Link Text'  => $link_text,
+                        'Link URL'   => $href,
+                        'Edit Link'  => admin_url( "post.php?post={$lesson->ID}&action=edit" ),
+                    ];
+                }
+            }
+        }
+    
+        if ( empty( $rows ) ) {
+            WP_CLI::success( 'No external links without target="_blank" found.' );
+            return;
+        }
+    
+        // Display the results in a table.
+        WP_CLI\Utils\format_items( 'table', $rows, [ 'Lesson URL', 'Link Text', 'Link URL', 'Edit Link' ] );
+    }
+
     /**
      * Check provided string is title case
      *
@@ -438,4 +496,5 @@ if ( class_exists( 'WP_CLI' ) ) {
     WP_CLI::add_command( 'vip-learn audit check-title-case-string', [ new Command(), 'check_title_case' ] );
     WP_CLI::add_command( 'vip-learn audit check-sentence-case-string', [ new Command(), 'check_sentence_case' ] );
     WP_CLI::add_command( 'vip-learn audit word-instances', [ new Command(), 'word_instance_audit' ] );
+    WP_CLI::add_command( 'vip-learn audit links', [ new Command(), 'link_audit' ] );
 }

@@ -9,7 +9,7 @@ class Punctuation {
      * @var array
      */
     protected array $upper_case = [
-        'HTML', 'PHP', 'AJAX', 'SSH', 'WP', 'CLI', 'GUI', 'HTTP', 'API', 'VVV', 'CSS', 'WSOD', 
+        'HTML', 'PHP', 'AJAX', 'SSH', 'WP', 'CLI', 'GUI', 'HTTP', 'HTTPS', 'HSTS', 'API', 'VVV', 'CSS', 'WSOD', 
         'ELK', 'VIP', 'MU', 'PHPCS', 'IDE', 'PHPMD', 'SQL', 'PEAR', 'BOM', 'APM', 'JS', 'OOM',
         'SSRF', 'IP', 'URL', 'WAF', 'TLS', 'XSS', 'DOM', 'OWASP', 'XML', 'RPC', 'CMS', 'TTL', 'TTFB', 'CDN',
         'SEO'
@@ -24,7 +24,7 @@ class Punctuation {
         'WordPress', 'phpMyAdmin', 'Xdebug', 'VirtualBox', 'MySQL', 'MariaDB', 'JavaScript', 'PHPStan',
         'TablePlus', 'DevTools', 'MySQLi', 'PHP_CodeSniffer', 'jQuery', 'SQLite', 'vs.', 'WP_Query', 'PhpStorm', 'URLs',
         'Elasticsearch', 'DOMPurify', 'DDoS', 'DoS', 'WebDriver', 'WordPress.com', 'ETag', 'wp-env', 'wp-admin',
-        'fopen'
+        'fopen', 'CMSs', 'wpdb'
     ];
 
     /**
@@ -37,6 +37,13 @@ class Punctuation {
         'VS' => 'Code',
     ];
 
+    /**
+     * Get incorrect word instances.
+     * 
+     * @param string $text
+     * @param array $word_instances
+     * @return array
+     */
     public function get_incorrect_word_instances( string $text, array $word_instances ): array
     {
         if( empty( $text ) ) return [];
@@ -57,6 +64,16 @@ class Punctuation {
         }
         return $results;
     }
+    /**
+     * Check if a word matches a word instance but with incorrect casing.
+     * 
+     * Compares a word against an array of word instances to find any case-sensitive
+     * mismatches. Returns an array with the correct and incorrect usage if found.
+     * 
+     * @param string $word The word to check
+     * @param array $word_instances Array of correctly cased word instances to check against
+     * @return array Empty array if no mismatch found, or array with 'correct_usage' and 'incorrect_usage' keys
+     */
 
     protected function check_word_instance( string $word, array $word_instances ) {
         $lcase_word = strtolower( $word );
@@ -161,6 +178,11 @@ class Punctuation {
         $this->special_case = array_diff( $this->special_case, $words );
     }
 
+    /**
+     * Get the list of special case words.
+     * 
+     * @return array
+     */
     public function get_special_case_array() {
         return $this->special_case;
     }

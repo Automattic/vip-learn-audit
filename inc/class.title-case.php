@@ -25,7 +25,7 @@ class TitleCase extends Punctuation
      * @var array
      */
     private $lower_case = [
-        'a', 'an', 'and', 'as', 'at', 'by', 'for', 'in', 'of', 'on', 'to', 'up', 'the',
+        'a', 'an', 'and', 'as', 'at', 'by', 'for', 'in', 'of', 'on', 'up', 'the',
         'or', 'nor', 'yet', 'but', 'so', 'per', 'via', 'is', 'it', 'be', 'vs'
     ];
 
