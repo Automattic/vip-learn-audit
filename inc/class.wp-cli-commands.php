@@ -400,6 +400,42 @@ class Command {
         WP_CLI\Utils\format_items( 'table', $rows, [ 'Lesson URL', 'Link Text', 'Link URL', 'Edit Link' ] );
     }
 
+    public function completion_times_audit( $args ) {
+        list( $course_id ) = $args;
+        $course_id = intVal( $course_id );
+        if( 0 === $course_id ) {
+            WP_CLI::error( "Please specify a course id" );
+        }
+        $te = new TimeEstimation;
+        $data = $te->course_estimate( $course_id );
+        $rows = [];
+        $total_reading_time = 0;
+        $total_estimated_time = 0;
+        foreach($data['lesson_data'] as $lesson){
+            $rows[] = [
+                'Name' => $lesson['lesson_title'],
+                'Reading time' => $lesson['lesson_time']['reading_time'],
+                'Estimated time' => $lesson['lesson_time']['estimated_time'],
+            ];
+            $total_reading_time += $lesson['lesson_time']['reading_time'];
+            $total_estimated_time += $lesson['lesson_time']['estimated_time'];
+        }
+
+        $rows[] = [
+            'Name' => 'Totals',
+            'Reading time' => $total_reading_time . ' (' . gmdate( "H:i", $total_reading_time ) . ' hours)',
+            'Estimated time' => $total_estimated_time . ' (' . gmdate( "H:i", $total_estimated_time ) . ' hours)'
+        ];
+
+        if ( empty( $rows ) ) {
+            WP_CLI::error( 'No lesson timing data found' );
+        } else {
+            // Display the results in a table.
+            WP_CLI\Utils\format_items( 'table', $rows, [ 'Name', 'Reading time', 'Estimated time' ] );
+        }
+
+    }
+
     /**
      * Check provided string is title case
      *
@@ -497,4 +533,5 @@ if ( class_exists( 'WP_CLI' ) ) {
     WP_CLI::add_command( 'vip-learn audit check-sentence-case-string', [ new Command(), 'check_sentence_case' ] );
     WP_CLI::add_command( 'vip-learn audit word-instances', [ new Command(), 'word_instance_audit' ] );
     WP_CLI::add_command( 'vip-learn audit links', [ new Command(), 'link_audit' ] );
+    WP_CLI::add_command( 'vip-learn audit completion-times', [ new Command(), 'completion_times_audit' ] );
 }
